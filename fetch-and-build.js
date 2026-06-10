@@ -37,9 +37,11 @@ const { computeRates } = require('./fuel-engine.js');
 // ----------------------------------------------------------------------------
 
 const SOURCES = {
-  // NRCan Canadian average diesel retail price. productID=5 selects diesel.
-  // Confirmed: returns the diesel table with the current weekly value.
-  nrcanDiesel: 'https://www2.nrcan.gc.ca/eneene/sources/pripri/prices_bycity_e.cfm?productID=5',
+  // NRCan Canadian average diesel retail price. The per-location "by fuel" page
+  // for Canada has the current value in a clean HTML table cell, unlike the
+  // by-city page which renders an SVG chart. Confirmed: the Diesel/today cell
+  // reads cents per litre (e.g. 205.8 = $2.058/L).
+  nrcanDiesel: 'https://www2.nrcan.gc.ca/eneene/sources/pripri/prices_byfuel_e.cfm?locationName=Canada',
 
   // EIA weekly US on-highway diesel + gasoline RSS. Confirmed: returns national
   // and regional diesel prices in dollars per gallon.
@@ -81,36 +83,24 @@ async function fetchNrcanDiesel() {
   const res = await fetch(SOURCES.nrcanDiesel, { headers: { 'Accept-Language': 'en-CA' } });
   if (!res.ok) throw new Error(`NRCan responded ${res.status}`);
   const html = await res.text();
-  const $ = cheerio.load(html);
-  // NRCan shows the Canada average in cents per litre. Find the "Canada Average"
-  // row and read its most recent value. The page structure is a simple table.
-  let cents = null;
-  $('td, th').each((_, el) => {
-    const txt = $(el).text().trim();
-    if (/canada\s*average/i.test(txt)) {
-      // The value cells follow in the same row.
-      const row = $(el).closest('tr');
-      const nums = row.find('td').map((__, c) => parseFloat($(c).text().replace(/[^0-9.]/g, ''))).get()
-        .filter(n => !isNaN(n) && n > 50 && n < 500); // diesel in c/L sanity band
-      if (nums.length) cents = nums[nums.length - 1];
-    }
-  });
-  if (cents == null) throw new Error('NRCan diesel value not found in page');
-  return +(cents / 100).toFixed(4); // convert cents/L to dollars/L
+  // The current Canada diesel price sits in a table cell tagged
+  // headers="Diesel todayDate centLitre" and holds cents per litre, e.g. 205.8.
+  const m = html.match(/headers="Diesel todayDate centLitre"[^>]*>\s*([0-9]+(?:\.[0-9]+)?)/i);
+  if (!m) throw new Error('NRCan diesel value not found in page');
+  const cents = parseFloat(m[1]);
+  if (!(cents > 50 && cents < 500)) throw new Error(`NRCan diesel out of sane range: ${cents}`);
+  return +(cents / 100).toFixed(4); // cents/L to dollars/L
 }
 
 async function fetchEiaOnHighwayDiesel() {
   const res = await fetch(SOURCES.eiaOnHighwayRss);
   if (!res.ok) throw new Error(`EIA RSS responded ${res.status}`);
   const xml = await res.text();
-  const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
-  // The RSS description contains a CDATA block with national diesel price.
-  // Pull the US national on-highway diesel number (dollars per gallon).
-  const items = parsed?.rss?.channel?.item;
-  const blob = Array.isArray(items) ? items.map(i => i.description).join(' ') : String(items?.description || '');
-  // Match the national average diesel figure.
-  const m = blob.match(/diesel[^$]*\$?\s*([0-9]\.[0-9]{2,3})/i);
-  if (!m) throw new Error('EIA on-highway diesel value not found in RSS');
+  // The diesel block lists regional prices; the US national average is the
+  // value tagged ".. U.S." right under the On-Highway Diesel header, e.g.
+  // "5.210  .. U.S.". Match that specifically, not the first regional figure.
+  const m = xml.match(/On-Highway Diesel[\s\S]*?([0-9]\.[0-9]{3})\s*\.\.\s*U\.S\./i);
+  if (!m) throw new Error('EIA national on-highway diesel value not found in RSS');
   return parseFloat(m[1]);
 }
 
