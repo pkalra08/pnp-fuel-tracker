@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-10T18:49:08.902Z",
+  "generatedAt": "2026-06-10T19:00:16.281Z",
   "nextUpdate": "Every Monday morning",
   "inputs": {
     "nrcanDieselCAD": null,
-    "eiaOnHighwayUSD": 6.94,
+    "eiaOnHighwayUSD": 5.21,
     "eiaJetGulfUSD": 3.371,
     "jetAsOf": "2026-06-05"
   },
@@ -23,7 +23,7 @@
         },
         {
           "service": "Standard Service to the U.S.",
-          "current": null,
+          "current": 20,
           "previous": null
         },
         {
@@ -71,7 +71,7 @@
         },
         {
           "service": "Intl.",
-          "current": null,
+          "current": 20,
           "previous": null
         }
       ]
