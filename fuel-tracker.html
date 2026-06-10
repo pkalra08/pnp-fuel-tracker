@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Canadian Fuel Surcharge Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body {
+    font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #333333;
+    background: #FFFFFF;
+    margin: 0;
+    padding: 60px 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* =====================================================
+     EMBED START. All CSS scoped to #pnp-fuel-tracker.
+     ===================================================== */
+
+  #pnp-fuel-tracker {
+    --pnp-orange: #dc5539;
+    --pnp-orange-dark: #b8421f;
+    --pnp-ink: #000000;
+    --pnp-text: #333333;
+    --pnp-muted: #575757;
+    --pnp-line: #E5E5E5;
+    --pnp-bg: #FFFFFF;
+    --pnp-soft: #f8f3f3;
+    --pnp-cool: #fafcfd;
+    --pnp-accent-bg: #f3d2cd;
+    --pnp-navy: #1c244b;
+    --pnp-navy-deep: #112742;
+    --pnp-up: #C44C2C;
+    --pnp-down: #2E7D4F;
+    --pnp-flat: #575757;
+
+    font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--pnp-text);
+    background: var(--pnp-bg);
+    line-height: 1.55;
+    font-size: 17px;
+    max-width: 920px;
+    margin: 0 auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #pnp-fuel-tracker *,
+  #pnp-fuel-tracker *::before,
+  #pnp-fuel-tracker *::after { box-sizing: border-box; }
+
+  #pnp-fuel-tracker .pnp-eyebrow {
+    display: inline-block;
+    background: var(--pnp-accent-bg);
+    color: var(--pnp-orange);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 7px 16px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+  }
+  #pnp-fuel-tracker h2.pnp-h1 {
+    font-size: 40px;
+    line-height: 1.08;
+    color: var(--pnp-ink);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 16px;
+  }
+  #pnp-fuel-tracker .pnp-lede {
+    font-size: 17px;
+    color: var(--pnp-muted);
+    margin: 0 0 28px;
+    max-width: none;
+  }
+
+  #pnp-fuel-tracker .pnp-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    margin-bottom: 32px;
+    background: var(--pnp-bg);
+    border: 1px solid var(--pnp-line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  #pnp-fuel-tracker .pnp-meta-item {
+    padding: 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  #pnp-fuel-tracker .pnp-meta-item + .pnp-meta-item {
+    border-left: 1px solid var(--pnp-line);
+  }
+  #pnp-fuel-tracker .pnp-meta-label {
+    color: var(--pnp-muted);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  #pnp-fuel-tracker .pnp-meta-value {
+    color: var(--pnp-ink);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
+  }
+  #pnp-fuel-tracker .pnp-live-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--pnp-down);
+    margin-right: 9px;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 3px rgba(46, 125, 79, 0.15);
+  }
+
+  @media (max-width: 540px) {
+    #pnp-fuel-tracker .pnp-meta { grid-template-columns: 1fr; }
+    #pnp-fuel-tracker .pnp-meta-item + .pnp-meta-item {
+      border-left: none;
+      border-top: 1px solid var(--pnp-line);
+    }
+  }
+
+  #pnp-fuel-tracker .pnp-table-wrap {
+    background: var(--pnp-bg);
+    border: 1px solid var(--pnp-line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  #pnp-fuel-tracker table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+  #pnp-fuel-tracker thead th {
+    background: var(--pnp-cool);
+    color: var(--pnp-muted);
+    text-align: left;
+    padding: 14px 16px;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--pnp-line);
+  }
+  #pnp-fuel-tracker thead th.num { text-align: right; }
+
+  #pnp-fuel-tracker tbody td {
+    padding: 16px;
+    border-bottom: 1px solid var(--pnp-line);
+    color: var(--pnp-text);
+    vertical-align: top;
+  }
+  #pnp-fuel-tracker tbody tr.last-of-group td { border-bottom: 2px solid var(--pnp-line); }
+  #pnp-fuel-tracker tbody tr:last-child td { border-bottom: none; }
+
+  #pnp-fuel-tracker tbody td.carrier {
+    color: var(--pnp-ink);
+    font-weight: 600;
+    background: var(--pnp-cool);
+    border-right: 1px solid var(--pnp-line);
+    font-size: 15px;
+  }
+  #pnp-fuel-tracker tbody td.carrier a {
+    color: var(--pnp-ink);
+    text-decoration: none;
+    transition: color 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  #pnp-fuel-tracker tbody td.carrier a:hover { color: var(--pnp-orange); }
+  #pnp-fuel-tracker .pnp-ext-icon {
+    font-size: 11px;
+    color: var(--pnp-muted);
+    vertical-align: super;
+    line-height: 1;
+  }
+  #pnp-fuel-tracker tbody td.carrier a:hover .pnp-ext-icon { color: var(--pnp-orange); }
+  #pnp-fuel-tracker .pnp-verified {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--pnp-muted);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  #pnp-fuel-tracker .pnp-verified-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--pnp-down);
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+  #pnp-fuel-tracker .pnp-verified.stale .pnp-verified-dot { background: #D4A23C; }
+  #pnp-fuel-tracker .pnp-verified.failed .pnp-verified-dot { background: var(--pnp-up); }
+  #pnp-fuel-tracker .pnp-verified.stale { color: #8A6F2A; }
+  #pnp-fuel-tracker .pnp-verified.failed { color: var(--pnp-up); }
+
+  #pnp-fuel-tracker tbody td.service {
+    color: var(--pnp-text);
+    font-size: 14px;
+  }
+  #pnp-fuel-tracker tbody td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--pnp-ink);
+  }
+  #pnp-fuel-tracker tbody td.change {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  #pnp-fuel-tracker .ch-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+  #pnp-fuel-tracker .ch-up   { color: var(--pnp-up); }
+  #pnp-fuel-tracker .ch-down { color: var(--pnp-down); }
+  #pnp-fuel-tracker .ch-flat { color: var(--pnp-flat); }
+  #pnp-fuel-tracker .ch-arrow { font-size: 10px; line-height: 1; }
+
+  #pnp-fuel-tracker .pnp-faq {
+    margin-top: 32px;
+  }
+  #pnp-fuel-tracker .pnp-faq-item {
+    border-bottom: 1px solid var(--pnp-line);
+  }
+  #pnp-fuel-tracker .pnp-faq-item:first-child {
+    border-top: 1px solid var(--pnp-line);
+  }
+  #pnp-fuel-tracker .pnp-faq-item summary {
+    padding: 18px 0;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--pnp-ink);
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: color 0.15s ease;
+  }
+  #pnp-fuel-tracker .pnp-faq-item summary:hover {
+    color: var(--pnp-orange);
+  }
+  #pnp-fuel-tracker .pnp-faq-item summary::-webkit-details-marker { display: none; }
+  #pnp-fuel-tracker .pnp-faq-item summary::after {
+    content: "+";
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--pnp-muted);
+    line-height: 1;
+    margin-left: 16px;
+    flex-shrink: 0;
+    transition: color 0.15s ease;
+  }
+  #pnp-fuel-tracker .pnp-faq-item[open] summary::after {
+    content: "−";
+    color: var(--pnp-orange);
+  }
+  #pnp-fuel-tracker .pnp-faq-item[open] summary {
+    color: var(--pnp-orange);
+  }
+  #pnp-fuel-tracker .pnp-faq-body {
+    padding: 0 0 20px;
+    color: var(--pnp-text);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  #pnp-fuel-tracker .pnp-faq-body p { margin: 0 0 10px; }
+  #pnp-fuel-tracker .pnp-faq-body p:last-child { margin: 0; }
+  #pnp-fuel-tracker .pnp-faq-body a {
+    color: var(--pnp-ink);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--pnp-line);
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  #pnp-fuel-tracker .pnp-faq-body a:hover {
+    color: var(--pnp-orange);
+    border-bottom-color: var(--pnp-orange);
+  }
+
+  @media (max-width: 780px) {
+    #pnp-fuel-tracker h2.pnp-h1 { font-size: 26px; }
+    #pnp-fuel-tracker thead th.hide-mobile,
+    #pnp-fuel-tracker tbody td.hide-mobile { display: none; }
+    #pnp-fuel-tracker tbody td { padding: 12px 12px; }
+    #pnp-fuel-tracker thead th { padding: 10px 12px; }
+  }
+
+  /* ===== EMBED END ===== */
+</style>
+</head>
+<body>
+
+<div id="pnp-fuel-tracker">
+
+  <div class="pnp-eyebrow">Fuel Surcharge Tracker</div>
+  <h2 class="pnp-h1">Canadian carrier fuel rates, this week.</h2>
+  <p class="pnp-lede">Fuel is the line on your invoice that moves the most and explains the least. We track every major Canadian carrier and show the current published rate, with the prior period for comparison. Some carriers reset weekly. Others monthly. The verified date next to each carrier shows when we last confirmed against their published page.</p>
+
+  <div class="pnp-meta">
+    <div class="pnp-meta-item">
+      <span class="pnp-meta-label">Next update</span>
+      <span class="pnp-meta-value"><span class="pnp-live-dot"></span><span id="pnp-next-update">May 19, 2026</span></span>
+    </div>
+    <div class="pnp-meta-item">
+      <span class="pnp-meta-label">Update cadence</span>
+      <span class="pnp-meta-value">Weekly, every Monday morning</span>
+    </div>
+  </div>
+
+  <div class="pnp-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Carrier</th>
+          <th>Service</th>
+          <th class="num">Current rate</th>
+          <th class="num hide-mobile">Previous</th>
+          <th class="num">Change</th>
+        </tr>
+      </thead>
+      <tbody id="pnp-fuel-tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="pnp-faq">
+    <details class="pnp-faq-item">
+      <summary>What most merchants miss about fuel surcharges</summary>
+      <div class="pnp-faq-body">
+        <p>Fuel is one of the largest variable costs on your carrier invoice. Some carriers discount fuel for contracted shippers. Others do not. Some bake it into your rate tier so you never see it as a separate line.</p>
+        <p>Part n Parcel knows which is which, and uses that to get you the best possible overall cost.</p>
+      </div>
+    </details>
+
+    <details class="pnp-faq-item">
+      <summary>How does this tracker work?</summary>
+      <div class="pnp-faq-body">
+        <p>Fuel surcharges reset based on diesel and jet fuel prices published by Natural Resources Canada, the U.S. Energy Information Administration, and Kalibrate Technologies. Each carrier uses its own methodology and reset cadence.</p>
+        <p>Every row carries its own verified date so partial failures are visible, not hidden. A green dot means the source was successfully read this week. Yellow means the row is using the last known value because the source could not be reached on the latest run.</p>
+        <p>Click any carrier name to verify the rate against their published page. Part n Parcel is not affiliated with any carrier.</p>
+      </div>
+    </details>
+
+    <details class="pnp-faq-item">
+      <summary>Other Canadian carriers we don't track yet</summary>
+      <div class="pnp-faq-body">
+        <p>We do not currently track these carriers, but you can verify their fuel surcharges at the published source.</p>
+        <p><a href="https://www.dhl.com/ca-en/home/ecommerce/business-help-center/surcharge-policies.html" target="_blank" rel="noopener noreferrer">DHL Canada</a> · <a href="https://gls-group.com/CA/en/send-and-receive/tools/fuel-carbon-surcharges/" target="_blank" rel="noopener noreferrer">GLS Canada</a> · <a href="https://nationex.com" target="_blank" rel="noopener noreferrer">NationEx</a></p>
+      </div>
+    </details>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  const root = document.getElementById('pnp-fuel-tracker');
+  if (!root) return;
+
+  // ===========================================================================
+  // DATA SOURCE. This is the only line to change at deploy time.
+  // Paste the Raw URL of fuel-rates.json from your GitHub repo here.
+  // Example: https://raw.githubusercontent.com/yourname/pnp-fuel-tracker/main/fuel-rates.json
+  // The weekly GitHub job keeps that file current. The widget reads it on load.
+  // If the fetch fails for any reason, the widget falls back to the values
+  // baked in below so the page is never blank.
+  // ===========================================================================
+  const DATA_SOURCE = '';  // <-- paste your fuel-rates.json Raw URL between the quotes
+
+  // Fallback data, used only if DATA_SOURCE is empty or unreachable.
+  const FALLBACK_DATA = {
+    nextUpdate: 'Every Monday morning',
+    carriers: [
+      {
+        name: 'UPS Canada',
+        url: 'https://www.ups.com/ca/en/support/shipping-support/shipping-costs-rates/fuel-surcharges',
+        lastVerified: '2026-05-13',
+        cadence: 'weekly',
+        status: 'ok',
+        services: [
+          { service: 'Standard Service within Canada', current: 42.00, previous: 41.50 },
+          { service: 'Standard Service to the U.S.', current: 21.25, previous: 20.50 },
+          { service: 'International Express, Expedited & 3 Day Select', current: 39.50, previous: 37.00 },
+          { service: 'Domestic Express and Expedited', current: 35.00, previous: 34.50 }
+        ]
+      },
+      {
+        name: 'FedEx Express',
+        url: 'https://www.fedex.com/en-ca/shipping/fuel-surcharges.html',
+        lastVerified: '2026-05-13',
+        cadence: 'weekly',
+        status: 'ok',
+        services: [
+          { service: 'Intra-CAN', current: 41.50, previous: 39.50 },
+          { service: 'Intl.', current: 39.50, previous: 35.75 }
+        ]
+      },
+      {
+        name: 'FedEx Ground and pickup services',
+        url: 'https://www.fedex.com/en-ca/shipping/fuel-surcharges.html',
+        lastVerified: '2026-05-13',
+        cadence: 'weekly',
+        status: 'ok',
+        services: [
+          { service: 'Intra-CAN and pickup services', current: 41.50, previous: 39.50 },
+          { service: 'Intl.', current: 21.25, previous: 20.50 }
+        ]
+      },
+      {
+        name: 'Purolator',
+        url: 'https://www.purolator.com/en/courier-fuel-surcharges',
+        lastVerified: '2026-05-13',
+        cadence: 'monthly',
+        status: 'ok',
+        services: [
+          { service: 'Courier (all services and destinations)', current: 45.50, previous: 34.50 }
+        ]
+      },
+      {
+        name: 'Canpar Express',
+        url: 'https://www.canpar.com/en/shipping/fuel_surcharge.htm',
+        lastVerified: '2026-05-13',
+        cadence: 'weekly',
+        status: 'ok',
+        services: [
+          { service: 'Domestic Canada', current: 40.80, previous: 41.55 }
+        ]
+      },
+      {
+        name: 'Canada Post',
+        url: 'https://www.canadapost-postescanada.ca/cpc/en/support/kb/company-policies/rates-taxes-surcharges/fuel-surcharges-on-mail-and-parcels.page',
+        lastVerified: '2026-05-13',
+        cadence: 'weekly',
+        status: 'ok',
+        services: [
+          { service: 'Domestic Services', current: 35.00, previous: 35.00 },
+          { service: 'USA and International Parcel Services', current: 20.75, previous: 20.75 },
+          { service: 'USA and International Packet Services', current: 18.75, previous: 18.75 }
+        ]
+      },
+      {
+        name: 'Loomis Express',
+        url: 'https://www.loomisexpress.com/loomship/Services/FuelSurcharges',
+        lastVerified: '2026-05-13',
+        cadence: 'weekly',
+        status: 'ok',
+        services: [
+          { service: 'Domestic Express and Ground Service', current: 40.80, previous: 41.55 },
+          { service: 'Worldwide Service', current: 25.50, previous: 25.50 }
+        ]
+      }
+    ]
+  };
+
+  function formatVerified(iso) {
+    if (!iso) return 'pending';
+    const d = new Date(iso + 'T00:00:00');
+    const opts = { month: 'short', day: 'numeric' };
+    return d.toLocaleDateString('en-CA', opts);
+  }
+
+  function renderChange(curr, prev) {
+    const delta = +(curr - prev).toFixed(2);
+    if (delta > 0) return `<span class="ch-pill ch-up"><span class="ch-arrow">▲</span>Up ${delta.toFixed(2)}%</span>`;
+    if (delta < 0) return `<span class="ch-pill ch-down"><span class="ch-arrow">▼</span>Down ${Math.abs(delta).toFixed(2)}%</span>`;
+    return `<span class="ch-pill ch-flat">No change</span>`;
+  }
+
+  function renderTable(fuelData) {
+    const tbody = root.querySelector('#pnp-fuel-tbody');
+    const rows = [];
+
+    fuelData.carriers.forEach(carrier => {
+      const rowspan = carrier.services.length;
+      carrier.services.forEach((svc, i) => {
+        const isFirstOfGroup = i === 0;
+        const isLastOfGroup = i === carrier.services.length - 1;
+        let cells = '';
+
+        if (isFirstOfGroup) {
+          const statusClass = carrier.status === 'stale' ? 'stale' : carrier.status === 'failed' ? 'failed' : '';
+          const statusLabel = carrier.status === 'stale' ? 'last verified' : carrier.status === 'failed' ? 'source failed' : 'verified';
+          const cadence = carrier.cadence === 'monthly' ? 'resets monthly' : 'resets weekly';
+          cells += `
+            <td class="carrier" rowspan="${rowspan}">
+              <a href="${carrier.url}" target="_blank" rel="noopener noreferrer" title="Open ${carrier.name} fuel surcharge page">
+                ${carrier.name}<span class="pnp-ext-icon">↗</span>
+              </a>
+              <span class="pnp-verified ${statusClass}" title="Last successful source check">
+                <span class="pnp-verified-dot"></span>${statusLabel} ${formatVerified(carrier.lastVerified)} · ${cadence}
+              </span>
+            </td>
+          `;
+        }
+
+        const curr = (typeof svc.current === 'number') ? svc.current.toFixed(2) + '%' : 'pending';
+        const prevCell = (typeof svc.previous === 'number') ? svc.previous.toFixed(2) + '%' : '';
+        const change = (typeof svc.current === 'number' && typeof svc.previous === 'number')
+          ? renderChange(svc.current, svc.previous) : '';
+        cells += `
+          <td class="service">${svc.service}</td>
+          <td class="num">${curr}</td>
+          <td class="num hide-mobile">${prevCell}</td>
+          <td class="change">${change}</td>
+        `;
+
+        rows.push(`<tr class="${isLastOfGroup ? 'last-of-group' : ''}">${cells}</tr>`);
+      });
+    });
+
+    tbody.innerHTML = rows.join('');
+    const nextEl = root.querySelector('#pnp-next-update');
+    if (nextEl) nextEl.textContent = fuelData.nextUpdate || 'Every Monday morning';
+  }
+
+  // Load live data from DATA_SOURCE, fall back to baked-in values on any failure.
+  function load() {
+    if (!DATA_SOURCE) { renderTable(FALLBACK_DATA); return; }
+    fetch(DATA_SOURCE, { cache: 'no-store' })
+      .then(r => { if (!r.ok) throw new Error('fetch failed ' + r.status); return r.json(); })
+      .then(data => {
+        if (!data || !Array.isArray(data.carriers) || !data.carriers.length) throw new Error('empty data');
+        renderTable(data);
+      })
+      .catch(() => renderTable(FALLBACK_DATA));
+  }
+
+  load();
+})();
+</script>
+
+</body>
+</html>

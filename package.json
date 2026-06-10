@@ -1,0 +1,16 @@
+{
+  "name": "pnp-fuel-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Part n Parcel Canadian carrier fuel surcharge engine and weekly data job.",
+  "main": "fuel-engine.js",
+  "scripts": {
+    "build": "node fetch-and-build.js"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5",
+    "cheerio": "^1.0.0",
+    "fast-xml-parser": "^4.5.0"
+  },
+  "license": "UNLICENSED"
+}
