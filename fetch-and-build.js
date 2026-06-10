@@ -62,6 +62,16 @@ const SOURCES = {
 
 const OUTPUT_FILE = path.join(__dirname, 'fuel-rates.json');
 
+// Some sources (notably NRCan) serve different content, or block, when the
+// request has no browser user-agent. A bare Node fetch from a data center is
+// exactly that. Send realistic browser headers on every request so the job
+// behaves the same from GitHub's runners as it does from a normal browser.
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-CA,en;q=0.9'
+};
+
 // Excel's date system counts days from 1899-12-30. Converts a serial to ISO.
 function excelDateToISO(serial) {
   const ms = Math.round((serial - 25569) * 86400 * 1000);
@@ -80,7 +90,7 @@ function todayISO() {
 // ----------------------------------------------------------------------------
 
 async function fetchNrcanDiesel() {
-  const res = await fetch(SOURCES.nrcanDiesel, { headers: { 'Accept-Language': 'en-CA' } });
+  const res = await fetch(SOURCES.nrcanDiesel, { headers: BROWSER_HEADERS });
   if (!res.ok) throw new Error(`NRCan responded ${res.status}`);
   const html = await res.text();
   // The current Canada diesel price sits in a table cell tagged
@@ -93,7 +103,7 @@ async function fetchNrcanDiesel() {
 }
 
 async function fetchEiaOnHighwayDiesel() {
-  const res = await fetch(SOURCES.eiaOnHighwayRss);
+  const res = await fetch(SOURCES.eiaOnHighwayRss, { headers: BROWSER_HEADERS });
   if (!res.ok) throw new Error(`EIA RSS responded ${res.status}`);
   const xml = await res.text();
   // The diesel block lists regional prices; the US national average is the
@@ -105,7 +115,7 @@ async function fetchEiaOnHighwayDiesel() {
 }
 
 async function fetchEiaJetFuel() {
-  const res = await fetch(SOURCES.eiaJetXls);
+  const res = await fetch(SOURCES.eiaJetXls, { headers: BROWSER_HEADERS });
   if (!res.ok) throw new Error(`EIA jet xls responded ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   const wb = xlsx.read(buf, { type: 'buffer' });
@@ -123,7 +133,7 @@ async function fetchEiaJetFuel() {
 async function fetchCanpar() {
   const res = await fetch(SOURCES.canparEndpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    headers: { ...BROWSER_HEADERS, 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify({})
   });
   if (!res.ok) throw new Error(`Canpar endpoint responded ${res.status}`);
@@ -141,7 +151,7 @@ async function fetchCanpar() {
 }
 
 async function fetchCanadaPost() {
-  const res = await fetch(SOURCES.canadaPostPage, { headers: { 'Accept-Language': 'en-CA' } });
+  const res = await fetch(SOURCES.canadaPostPage, { headers: BROWSER_HEADERS });
   if (!res.ok) throw new Error(`Canada Post responded ${res.status}`);
   const html = await res.text();
   const $ = cheerio.load(html);
