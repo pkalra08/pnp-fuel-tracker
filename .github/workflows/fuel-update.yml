@@ -33,6 +33,13 @@ jobs:
         run: npm install xlsx cheerio fast-xml-parser
 
       - name: Fetch fuel data and rebuild rates
+        env:
+          # FedEx Rating API credentials (clean tracker account, list rates only).
+          # Set these in Settings -> Secrets and variables -> Actions. If absent,
+          # the job falls back to the band-table estimate for FedEx rows.
+          FEDEX_CLIENT_ID: ${{ secrets.FEDEX_CLIENT_ID }}
+          FEDEX_CLIENT_SECRET: ${{ secrets.FEDEX_CLIENT_SECRET }}
+          FEDEX_ACCOUNT: ${{ secrets.FEDEX_ACCOUNT }}
         run: node fetch-and-build.js
 
       - name: Commit the updated rates

@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-11T16:45:56.470Z",
+  "generatedAt": "2026-06-11T17:31:43.133Z",
   "nextUpdate": "Every Monday morning",
   "inputs": {
-    "nrcanDieselCAD": 2.028,
+    "nrcanDieselCAD": 2.024,
     "eiaOnHighwayUSD": 5.21,
     "eiaJetGulfUSD": 3.371,
     "jetAsOf": "2026-06-05"
@@ -52,7 +52,7 @@
         },
         {
           "service": "Intl.",
-          "current": 34.5,
+          "current": 34,
           "previous": 34.5
         }
       ]
@@ -71,7 +71,7 @@
         },
         {
           "service": "Intl.",
-          "current": 20,
+          "current": 20.5,
           "previous": 20
         }
       ]
@@ -133,17 +133,17 @@
         {
           "service": "Domestic Services",
           "current": 33.5,
-          "previous": 36.5
+          "previous": 33.5
         },
         {
           "service": "USA and International Parcel Services",
           "current": 20,
-          "previous": 21.5
+          "previous": 20
         },
         {
           "service": "USA and International Packet Services",
           "current": 18,
-          "previous": 19.5
+          "previous": 18
         }
       ]
     }

@@ -63,6 +63,18 @@ const SOURCES = {
 const OUTPUT_FILE = path.join(__dirname, 'fuel-rates.json');
 const OVERRIDES_FILE = path.join(__dirname, 'overrides.json');
 
+// Local runs read carrier API credentials from .env (git-ignored). CI gets them
+// as environment variables from GitHub Actions Secrets. Either way they are
+// never written to any output file.
+(function loadDotEnv() {
+  try {
+    for (const line of fs.readFileSync(path.join(__dirname, '.env'), 'utf8').split('\n')) {
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+    }
+  } catch { /* no .env: fine, CI provides env vars */ }
+})();
+
 // Some sources (notably NRCan) serve different content, or block, when the
 // request has no browser user-agent. A bare Node fetch from a data center is
 // exactly that. Send realistic browser headers on every request so the job
@@ -172,6 +184,91 @@ async function fetchCanadaPost() {
   return { domestic, parcel, packet };
 }
 
+// FedEx Rating API. Authenticated against a clean tracker-only account with no
+// negotiated pricing, requesting LIST rates, so the response is the published
+// rate any standard merchant pays. FedEx states fuelSurchargePercent directly
+// in the response: the exact posted number, no band tables, no lag, no math.
+// If credentials are absent or the call fails, the orchestrator falls back to
+// the band-table derivation for the FedEx rows.
+async function fetchFedexApi() {
+  const id = process.env.FEDEX_CLIENT_ID;
+  const secret = process.env.FEDEX_CLIENT_SECRET;
+  const account = process.env.FEDEX_ACCOUNT;
+  if (!id || !secret || !account) throw new Error('FedEx API credentials not configured');
+  const base = process.env.FEDEX_BASE || 'https://apis.fedex.com';
+
+  const tokRes = await fetch(`${base}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: id, client_secret: secret })
+  });
+  if (!tokRes.ok) throw new Error(`FedEx OAuth responded ${tokRes.status}`);
+  const { access_token } = await tokRes.json();
+
+  async function quote(recipient, customs) {
+    const body = {
+      accountNumber: { value: account },
+      rateRequestControlParameters: { rateSortOrder: 'COMMITASCENDING' },
+      requestedShipment: {
+        shipper: { address: { postalCode: 'M5V2T6', countryCode: 'CA' } },
+        recipient: { address: recipient },
+        pickupType: 'DROPOFF_AT_FEDEX_LOCATION',
+        rateRequestType: ['LIST'],
+        requestedPackageLineItems: [{ weight: { units: 'LB', value: 1 } }]
+      }
+    };
+    if (customs) {
+      body.requestedShipment.customsClearanceDetail = {
+        commodities: [{
+          description: 'Rate check', quantity: 1, quantityUnits: 'PCS',
+          weight: { units: 'LB', value: 1 },
+          unitPrice: { amount: 10, currency: 'CAD' },
+          customsValue: { amount: 10, currency: 'CAD' }
+        }]
+      };
+    }
+    const res = await fetch(`${base}/rate/v1/rates/quotes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${access_token}`, 'X-locale': 'en_CA' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(`FedEx rate quote responded ${res.status}`);
+    const json = await res.json();
+    // service -> carrier-stated published fuel percent, off the LIST-rated detail
+    const out = {};
+    for (const d of (json.output?.rateReplyDetails || [])) {
+      const rated = (d.ratedShipmentDetails || []).find(r => r.rateType === 'LIST') || (d.ratedShipmentDetails || [])[0];
+      const pct = rated?.shipmentRateDetail?.fuelSurchargePercent;
+      if (pct != null) out[d.serviceType] = pct;
+    }
+    return out;
+  }
+
+  const domestic = await quote({ postalCode: 'H2Y1C6', countryCode: 'CA' });
+  const intl = await quote({ postalCode: '10001', countryCode: 'US' }, true);
+
+  function pick(rates, groundWanted) {
+    const entries = Object.entries(rates).filter(([svc]) => /GROUND/.test(svc) === groundWanted);
+    if (!entries.length) return null;
+    const pct = entries[0][1];
+    // All services in a family carry the same published percent. If FedEx ever
+    // splits them, fail loudly rather than publish one family member as all.
+    if (!entries.every(([, p]) => p === pct)) throw new Error(`FedEx fuel percent differs within family: ${JSON.stringify(entries)}`);
+    return pct;
+  }
+
+  const result = {
+    expressDomestic: pick(domestic, false),
+    groundDomestic: pick(domestic, true),
+    expressIntl: pick(intl, false),
+    groundIntl: pick(intl, true)
+  };
+  for (const [k, v] of Object.entries(result)) {
+    if (v == null || !(v > 0 && v < 100)) throw new Error(`FedEx ${k} missing or out of range: ${v}`);
+  }
+  return result;
+}
+
 // ----------------------------------------------------------------------------
 // ORCHESTRATOR. Fetch everything, fall back per-source, assemble the JSON.
 // ----------------------------------------------------------------------------
@@ -199,9 +296,10 @@ async function main() {
   const eiaDiesel = await safe('EIA on-highway diesel', fetchEiaOnHighwayDiesel);
   const eiaJet = await safe('EIA jet fuel', fetchEiaJetFuel);
 
-  // 2. Pull the two direct carrier sources.
+  // 2. Pull the direct carrier sources.
   const canpar = await safe('Canpar endpoint', fetchCanpar);
   const canadaPost = await safe('Canada Post page', fetchCanadaPost);
+  const fedexApi = await safe('FedEx Rating API', fetchFedexApi);
 
   // 3. Run the band-table engine for the government-derived carriers.
   //    The engine needs all three prices. If one is missing we still compute the
@@ -319,6 +417,34 @@ async function main() {
     } else if (p) {
       carriers.push({ ...p, status: 'stale' });
     }
+  }
+
+  // 3b. FedEx exact rates from the Rating API beat the band-table derivation.
+  //     Carrier-stated published percentages off LIST quotes on the clean
+  //     tracker account. On failure the derived values above stand, flagged by
+  //     the API row in the error log.
+  if (fedexApi.ok) {
+    const v = fedexApi.value;
+    const applyExact = (name, rows) => {
+      const c = carriers.find(x => x.name === name);
+      const p = prevCarrier(prev, name);
+      if (!c) return;
+      c.services = rows.map(([service, current]) => {
+        const old = p && (p.services || []).find(s => s.service === service);
+        return { service, current, previous: old ? old.current : current };
+      });
+      c.status = 'ok';
+      c.lastVerified = todayISO();
+    };
+    applyExact('FedEx Express', [
+      ['Intra-CAN', v.expressDomestic],
+      ['Intl.', v.expressIntl]
+    ]);
+    applyExact('FedEx Ground and pickup services', [
+      ['Intra-CAN and pickup services', v.groundDomestic],
+      ['Intl.', v.groundIntl]
+    ]);
+    console.log(`[fedex-api] exact list rates: Express CA ${v.expressDomestic}%, Express Intl ${v.expressIntl}%, Ground CA ${v.groundDomestic}%, Ground Intl ${v.groundIntl}%`);
   }
 
   // 4. Apply manually verified overrides (overrides.json). A verified posted
