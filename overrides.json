@@ -1,0 +1,30 @@
+{
+  "_what": "Manually verified posted rates. While an entry is unexpired, it beats the derived estimate for that carrier and service. Use this when a posted number is confirmed (carrier page, account quote cross-check) and the derived value disagrees. Each entry expires automatically so a stale override can never linger past the carrier's next adjustment.",
+  "_how": "carrier + service must match fuel-rates.json exactly. rate is the published percent. expires is the first day the override no longer applies (the carrier's next scheduled adjustment). previous is optional; omit it to suppress the week-over-week change pill rather than show a false comparison.",
+  "overrides": [
+    {
+      "carrier": "UPS Canada",
+      "service": "Standard Service within Canada",
+      "rate": 43.0,
+      "verified": "2026-06-11",
+      "expires": "2026-06-15",
+      "source": "Posted rate confirmed by account quote ratio (43.01%) and independent web pull, week of June 8 2026"
+    },
+    {
+      "carrier": "UPS Canada",
+      "service": "Domestic Express and Expedited",
+      "rate": 32.0,
+      "verified": "2026-06-11",
+      "expires": "2026-06-15",
+      "source": "Posted rate confirmed by account quote ratio (32.00%) and independent web pull, week of June 8 2026"
+    },
+    {
+      "carrier": "Purolator",
+      "service": "Courier (all services and destinations)",
+      "rate": 41.5,
+      "verified": "2026-06-11",
+      "expires": "2026-07-06",
+      "source": "Posted monthly rate active June 1 to July 5 2026, confirmed by account quote ratio (41.5%) and independent web pull"
+    }
+  ]
+}

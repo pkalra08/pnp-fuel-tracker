@@ -61,6 +61,7 @@ const SOURCES = {
 };
 
 const OUTPUT_FILE = path.join(__dirname, 'fuel-rates.json');
+const OVERRIDES_FILE = path.join(__dirname, 'overrides.json');
 
 // Some sources (notably NRCan) serve different content, or block, when the
 // request has no browser user-agent. A bare Node fetch from a data center is
@@ -318,6 +319,29 @@ async function main() {
     } else if (p) {
       carriers.push({ ...p, status: 'stale' });
     }
+  }
+
+  // 4. Apply manually verified overrides (overrides.json). A verified posted
+  //    number beats a derived estimate until the override expires. Expired
+  //    entries are ignored, so the derived value resumes automatically at the
+  //    carrier's next adjustment. previous is dropped on overridden rows unless
+  //    the override supplies one, so the site never shows a false change pill.
+  try {
+    const today = todayISO();
+    const { overrides = [] } = JSON.parse(fs.readFileSync(OVERRIDES_FILE, 'utf8'));
+    for (const o of overrides) {
+      if (o.expires && today >= o.expires) continue;
+      const carrier = carriers.find(c => c.name === o.carrier);
+      const svc = carrier && carrier.services.find(s => s.service === o.service);
+      if (!svc) { console.error(`[override] no match for ${o.carrier} / ${o.service}`); continue; }
+      svc.current = o.rate;
+      svc.previous = ('previous' in o) ? o.previous : null;
+      carrier.status = 'ok';
+      carrier.lastVerified = o.verified || today;
+      console.log(`[override] ${o.carrier} / ${o.service} = ${o.rate}% (verified ${o.verified}, expires ${o.expires})`);
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') console.error(`[override] skipped: ${e.message}`);
   }
 
   const output = {
