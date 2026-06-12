@@ -134,13 +134,38 @@ async function fetchEiaJetFuel() {
   const wb = xlsx.read(buf, { type: 'buffer' });
   const sheet = wb.Sheets['Data 1'] || wb.Sheets[wb.SheetNames[wb.SheetNames.length - 1]];
   const rows = xlsx.utils.sheet_to_json(sheet, { header: 1 });
-  // Find the last row that has a numeric date and price. Rows look like [serial, price].
-  let last = null;
-  for (const r of rows) {
-    if (typeof r[0] === 'number' && typeof r[1] === 'number') last = r;
+  const series = rows.filter(r => typeof r[0] === 'number' && typeof r[1] === 'number');
+  if (!series.length) throw new Error('EIA jet fuel value not found in spreadsheet');
+
+  // UPS (and FedEx) set each Monday's surcharge from the jet price of the week
+  // TWO WEEKS PRIOR ("the week that is two weeks prior to the adjustment", per
+  // the posted methodology). So the value the band tables need is not the
+  // latest row, it is the row for the week starting 14 days before the current
+  // effective Monday. EIA dates its weekly rows by the Friday of the priced week.
+  const now = new Date();
+  const monday = new Date(now);
+  monday.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7)); // most recent Monday
+  const windowStart = new Date(monday); windowStart.setUTCDate(monday.getUTCDate() - 14);
+  const windowEnd = new Date(monday); windowEnd.setUTCDate(monday.getUTCDate() - 8);
+  const startISO = windowStart.toISOString().slice(0, 10);
+  const endISO = windowEnd.toISOString().slice(0, 10);
+
+  let lagged = null;
+  for (const r of series) {
+    const d = excelDateToISO(r[0]);
+    if (d >= startISO && d <= endISO) lagged = r;
   }
-  if (!last) throw new Error('EIA jet fuel value not found in spreadsheet');
-  return { price: last[1], asOf: excelDateToISO(last[0]) };
+  const latest = series[series.length - 1];
+  if (!lagged) {
+    // The lag-week row should always exist in the history file; if EIA ever
+    // restructures, fall back to the latest row and say so in the log.
+    console.error(`[eia-jet] no row in lag window ${startISO}..${endISO}; using latest`);
+    lagged = latest;
+  }
+  return {
+    price: lagged[1], asOf: excelDateToISO(lagged[0]),
+    latest: latest[1], latestAsOf: excelDateToISO(latest[0])
+  };
 }
 
 async function fetchCanpar() {
@@ -466,11 +491,16 @@ async function main() {
   // 3. Run the band-table engine for the government-derived carriers.
   //    The engine needs all three prices. If one is missing we still compute the
   //    rows that do not depend on it, and the dependent rows fall back below.
+  // Carriers round the reported price "to the nearest cent" before the band
+  // lookup (per the posted UPS methodology), so the engine gets cent-rounded
+  // inputs. 3.297 -> 3.30 is the difference between landing in the right band
+  // and the one below it.
+  const cent = v => v == null ? null : Math.round(v * 100) / 100;
   const prices = {
-    nrcanDieselCAD: nrcan.ok ? nrcan.value : null,
-    nrcanDieselCAD4WeekAvg: nrcan.ok ? nrcan.value : null, // see note: 4-week avg refinement below
-    eiaOnHighwayUSD: eiaDiesel.ok ? eiaDiesel.value : null,
-    eiaJetGulfUSD: eiaJet.ok ? eiaJet.value.price : null
+    nrcanDieselCAD: nrcan.ok ? cent(nrcan.value) : null,
+    nrcanDieselCAD4WeekAvg: nrcan.ok ? cent(nrcan.value) : null, // see note: 4-week avg refinement below
+    eiaOnHighwayUSD: eiaDiesel.ok ? cent(eiaDiesel.value) : null,
+    eiaJetGulfUSD: eiaJet.ok ? cent(eiaJet.value.price) : null
   };
   const derived = computeRates(prices); // array of carriers with per-service rates
 
@@ -681,8 +711,22 @@ async function main() {
       nrcanDieselCAD: prices.nrcanDieselCAD,
       eiaOnHighwayUSD: prices.eiaOnHighwayUSD,
       eiaJetGulfUSD: prices.eiaJetGulfUSD,
-      jetAsOf: eiaJet.ok ? eiaJet.value.asOf : null
+      jetAsOf: eiaJet.ok ? eiaJet.value.asOf : null,
+      jetLagApplied: true,
+      eiaJetGulfUSDLatest: eiaJet.ok ? eiaJet.value.latest : null,
+      jetLatestAsOf: eiaJet.ok ? eiaJet.value.latestAsOf : null
     },
+    // Rolling record of raw weekly inputs. Enables lagged NRCan diesel and
+    // Purolator's four-week trailing average once enough weeks accumulate.
+    inputsHistory: [
+      ...((prev.inputsHistory || []).filter(h => h.date !== todayISO()).slice(-11)),
+      {
+        date: todayISO(),
+        nrcanDieselCAD: prices.nrcanDieselCAD,
+        eiaOnHighwayUSD: prices.eiaOnHighwayUSD,
+        eiaJetGulfUSDLatest: eiaJet.ok ? eiaJet.value.latest : null
+      }
+    ],
     carriers
   };
 

@@ -1,13 +1,24 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-12T15:26:01.972Z",
+  "generatedAt": "2026-06-12T15:37:22.203Z",
   "nextUpdate": "Every Monday morning",
   "inputs": {
-    "nrcanDieselCAD": 2.024,
+    "nrcanDieselCAD": 2.02,
     "eiaOnHighwayUSD": 5.21,
-    "eiaJetGulfUSD": 3.371,
-    "jetAsOf": "2026-06-05"
+    "eiaJetGulfUSD": 3.3,
+    "jetAsOf": "2026-05-29",
+    "jetLagApplied": true,
+    "eiaJetGulfUSDLatest": 3.371,
+    "jetLatestAsOf": "2026-06-05"
   },
+  "inputsHistory": [
+    {
+      "date": "2026-06-12",
+      "nrcanDieselCAD": 2.02,
+      "eiaOnHighwayUSD": 5.21,
+      "eiaJetGulfUSDLatest": 3.371
+    }
+  ],
   "carriers": [
     {
       "name": "UPS Canada",
@@ -28,8 +39,8 @@
         },
         {
           "service": "International Express, Expedited & 3 Day Select",
-          "current": 34.5,
-          "previous": 34.5
+          "current": 34,
+          "previous": 34
         },
         {
           "service": "Domestic Express and Expedited",
@@ -118,8 +129,8 @@
         },
         {
           "service": "Worldwide Service",
-          "current": 23.5,
-          "previous": 23.5
+          "current": 23.25,
+          "previous": 23
         }
       ]
     },
