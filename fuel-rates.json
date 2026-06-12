@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-12T14:55:15.864Z",
+  "generatedAt": "2026-06-12T15:26:01.972Z",
   "nextUpdate": "Every Monday morning",
   "inputs": {
     "nrcanDieselCAD": 2.024,
@@ -24,7 +24,7 @@
         {
           "service": "Standard Service to the U.S.",
           "current": 20.5,
-          "previous": 20
+          "previous": 20.5
         },
         {
           "service": "International Express, Expedited & 3 Day Select",

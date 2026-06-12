@@ -353,6 +353,82 @@ async function fetchUpsApi() {
   return result;
 }
 
+// Purolator E-Ship Estimating API. Pre-wired: activates automatically the week
+// PUROLATOR_KEY / PUROLATOR_PASSWORD / PUROLATOR_ACCOUNT appear in the
+// environment (GitHub Actions Secrets, or .env locally). Until then it throws
+// "not configured" and the verified override / derivation carries the row.
+// PnP's Purolator pricing carries no fuel discount and the quote ratio was
+// validated exact against the posted rate (41.5%, June 2026), so fuel / base
+// off a quick estimate is the published number.
+async function fetchPurolatorApi() {
+  const key = process.env.PUROLATOR_KEY;
+  const password = process.env.PUROLATOR_PASSWORD;
+  const account = process.env.PUROLATOR_ACCOUNT;
+  if (!key || !password || !account) throw new Error('Purolator API credentials not configured');
+  const base = process.env.PUROLATOR_BASE || 'https://webservices.purolator.com';
+
+  const envelope = `<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:v2="http://purolator.com/pws/datatypes/v2">
+  <soapenv:Header>
+    <v2:RequestContext>
+      <v2:Version>2.2</v2:Version>
+      <v2:Language>en</v2:Language>
+      <v2:GroupID>xxx</v2:GroupID>
+      <v2:RequestReference>PnP fuel tracker</v2:RequestReference>
+    </v2:RequestContext>
+  </soapenv:Header>
+  <soapenv:Body>
+    <v2:GetQuickEstimateRequest>
+      <v2:BillingAccountNumber>${account}</v2:BillingAccountNumber>
+      <v2:SenderPostalCode>M5X1A9</v2:SenderPostalCode>
+      <v2:ReceiverAddress>
+        <v2:City>Montreal</v2:City>
+        <v2:Province>QC</v2:Province>
+        <v2:Country>CA</v2:Country>
+        <v2:PostalCode>H2Y1C6</v2:PostalCode>
+      </v2:ReceiverAddress>
+      <v2:PackageType>CustomerPackaging</v2:PackageType>
+      <v2:TotalWeight>
+        <v2:Value>1</v2:Value>
+        <v2:WeightUnit>lb</v2:WeightUnit>
+      </v2:TotalWeight>
+    </v2:GetQuickEstimateRequest>
+  </soapenv:Body>
+</soapenv:Envelope>`;
+
+  const res = await fetch(`${base}/EWS/V2/Estimating/EstimatingService.asmx`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/xml; charset=utf-8',
+      'SOAPAction': 'http://purolator.com/pws/service/v2/GetQuickEstimate',
+      'Authorization': 'Basic ' + Buffer.from(`${key}:${password}`).toString('base64')
+    },
+    body: envelope
+  });
+  if (!res.ok) throw new Error(`Purolator E-Ship responded ${res.status}`);
+  const body = await res.text();
+
+  const rates = [];
+  for (const [, est] of body.matchAll(/<ShipmentEstimate>([\s\S]*?)<\/ShipmentEstimate>/g)) {
+    const baseCharge = parseFloat((est.match(/<BasePrice>(.*?)<\/BasePrice>/) || [])[1]);
+    let fuel = null;
+    for (const [, sur] of est.matchAll(/<Surcharge>([\s\S]*?)<\/Surcharge>/g)) {
+      const type = (sur.match(/<Type>(.*?)<\/Type>/) || [])[1] || '';
+      const desc = (sur.match(/<Description>(.*?)<\/Description>/) || [])[1] || '';
+      const amt = parseFloat((sur.match(/<Amount>(.*?)<\/Amount>/) || [])[1]);
+      if (/fuel/i.test(type + desc) && !isNaN(amt)) fuel = (fuel || 0) + amt;
+    }
+    if (fuel != null && baseCharge > 0) rates.push(Math.round((fuel / baseCharge) * 100 * 4) / 4);
+  }
+  if (!rates.length) throw new Error('Purolator estimate returned no fuel surcharge');
+  // One published courier rate covers every service; refuse to publish if the
+  // quote disagrees with itself.
+  if (!rates.every(r => r === rates[0])) throw new Error(`Purolator fuel percent differs across services: ${rates.join(', ')}`);
+  const rate = rates[0];
+  if (!(rate > 0 && rate < 100)) throw new Error(`Purolator rate out of range: ${rate}`);
+  return rate;
+}
+
 // ----------------------------------------------------------------------------
 // ORCHESTRATOR. Fetch everything, fall back per-source, assemble the JSON.
 // ----------------------------------------------------------------------------
@@ -385,6 +461,7 @@ async function main() {
   const canadaPost = await safe('Canada Post page', fetchCanadaPost);
   const fedexApi = await safe('FedEx Rating API', fetchFedexApi);
   const upsApi = await safe('UPS Rating API', fetchUpsApi);
+  const puroApi = await safe('Purolator E-Ship API', fetchPurolatorApi);
 
   // 3. Run the band-table engine for the government-derived carriers.
   //    The engine needs all three prices. If one is missing we still compute the
@@ -554,6 +631,22 @@ async function main() {
       c.status = 'ok';
       c.lastVerified = todayISO();
       console.log(`[ups-api] exact list rates: Standard CA ${v.standardCanada}%, Standard US ${v.standardUS}%, Domestic Express ${v.domesticExpress}%`);
+    }
+  }
+
+  // 3d. Purolator exact rate from E-Ship, once credentials exist. While the
+  //     verified override below is still active it wins (same number); delete
+  //     the override when this goes live.
+  if (puroApi.ok) {
+    const c = carriers.find(x => x.name === 'Purolator');
+    const p = prevCarrier(prev, 'Purolator');
+    if (c && c.services[0]) {
+      const old = p && (p.services || [])[0];
+      c.services[0].previous = old ? old.current : puroApi.value;
+      c.services[0].current = puroApi.value;
+      c.status = 'ok';
+      c.lastVerified = todayISO();
+      console.log(`[purolator-api] exact rate: ${puroApi.value}%`);
     }
   }
 

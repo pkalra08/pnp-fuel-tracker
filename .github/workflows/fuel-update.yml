@@ -52,3 +52,28 @@ jobs:
           git add fuel-rates.json
           git diff --staged --quiet || git commit -m "Fuel rates updated $(date -u +%Y-%m-%d)"
           git push
+
+      # Runs AFTER the commit so the site always gets the best available data,
+      # then fails the run (which makes GitHub email you) only when something
+      # needs a human: a row fell back to last-known, or a manual override is
+      # about to expire with no API replacing it. Quiet means healthy.
+      - name: Alert on stale rows or expiring overrides
+        run: |
+          node -e "
+          const j = require('./fuel-rates.json');
+          const problems = [];
+          const stale = j.carriers.filter(c => c.status !== 'ok').map(c => c.name);
+          if (stale.length) problems.push('Rows on last-known values: ' + stale.join(', '));
+          try {
+            const { overrides = [] } = require('./overrides.json');
+            const today = new Date().toISOString().slice(0, 10);
+            const soon = new Date(Date.now() + 8 * 86400e3).toISOString().slice(0, 10);
+            for (const o of overrides) {
+              if (o.expires && o.expires > today && o.expires <= soon) {
+                problems.push('Override expires ' + o.expires + ': ' + o.carrier + ' / ' + o.service + '. Wire the carrier API or refresh the verified rate before then.');
+              }
+            }
+          } catch {}
+          if (problems.length) { console.error(problems.join('\n')); process.exit(1); }
+          console.log('All rows fresh. No overrides near expiry. Nothing to do.');
+          "
