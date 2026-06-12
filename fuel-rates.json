@@ -1,20 +1,30 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-12T15:37:22.203Z",
+  "generatedAt": "2026-06-12T15:48:37.235Z",
   "nextUpdate": "Every Monday morning",
   "inputs": {
     "nrcanDieselCAD": 2.02,
-    "eiaOnHighwayUSD": 5.21,
+    "nrcanLagApplied": false,
+    "eiaOnHighwayUSD": 5.35,
+    "dieselAsOf": "2026-06-01",
+    "dieselLagApplied": true,
     "eiaJetGulfUSD": 3.3,
     "jetAsOf": "2026-05-29",
-    "jetLagApplied": true,
-    "eiaJetGulfUSDLatest": 3.371,
-    "jetLatestAsOf": "2026-06-05"
+    "jetLagApplied": true
+  },
+  "backupCheck": {
+    "date": "2026-06-12",
+    "mismatches": [],
+    "skipped": [
+      "UPS Canada|Standard Service within Canada",
+      "FedEx Express|Intra-CAN",
+      "FedEx Ground and pickup services|Intra-CAN and pickup services"
+    ]
   },
   "inputsHistory": [
     {
       "date": "2026-06-12",
-      "nrcanDieselCAD": 2.02,
+      "nrcanDieselCAD": 2.024,
       "eiaOnHighwayUSD": 5.21,
       "eiaJetGulfUSDLatest": 3.371
     }
@@ -130,7 +140,7 @@
         {
           "service": "Worldwide Service",
           "current": 23.25,
-          "previous": 23
+          "previous": 23.25
         }
       ]
     },

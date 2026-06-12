@@ -64,6 +64,9 @@ jobs:
           const problems = [];
           const stale = j.carriers.filter(c => c.status !== 'ok').map(c => c.name);
           if (stale.length) problems.push('Rows on last-known values: ' + stale.join(', '));
+          for (const m of (j.backupCheck?.mismatches || [])) {
+            problems.push('Backup drift on ' + m.row + ': API says ' + m.api + '%, derivation says ' + m.derived + '%. A carrier likely changed its band table; update fuel-engine.js.');
+          }
           try {
             const { overrides = [] } = require('./overrides.json');
             const today = new Date().toISOString().slice(0, 10);

@@ -44,8 +44,14 @@ const SOURCES = {
   nrcanDiesel: 'https://www2.nrcan.gc.ca/eneene/sources/pripri/prices_byfuel_e.cfm?locationName=Canada',
 
   // EIA weekly US on-highway diesel + gasoline RSS. Confirmed: returns national
-  // and regional diesel prices in dollars per gallon.
+  // and regional diesel prices in dollars per gallon. Used as fallback when the
+  // history spreadsheet below fails; the RSS only carries the current week.
   eiaOnHighwayRss: 'https://www.eia.gov/petroleum/gasdiesel/includes/gas_diesel_rss.xml',
+
+  // EIA weekly US No 2 diesel retail price history spreadsheet. Same open
+  // format as the jet file; contains every week, which is what the carriers'
+  // two-week lag needs.
+  eiaDieselXls: 'https://www.eia.gov/dnav/pet/hist_xls/EMD_EPD2D_PTE_NUS_DPGw.xls',
 
   // EIA weekly US Gulf Coast kerosene-type jet fuel spot price spreadsheet.
   // Confirmed: open .xls, no key, parses to [excelDate, pricePerGallon] rows.
@@ -115,7 +121,57 @@ async function fetchNrcanDiesel() {
   return +(cents / 100).toFixed(4); // cents/L to dollars/L
 }
 
+// Shared helpers for EIA weekly history spreadsheets ([excelDate, price] rows)
+// and the carriers' two-week lag: each Monday's surcharge uses the price from
+// the week starting 14 days before that Monday.
+function parseEiaSeries(buf) {
+  const wb = xlsx.read(buf, { type: 'buffer' });
+  const sheet = wb.Sheets['Data 1'] || wb.Sheets[wb.SheetNames[wb.SheetNames.length - 1]];
+  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+  return rows.filter(r => typeof r[0] === 'number' && typeof r[1] === 'number');
+}
+
+function lagWindow(weeksBack) {
+  const now = new Date();
+  const monday = new Date(now);
+  monday.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7)); // most recent Monday
+  const start = new Date(monday); start.setUTCDate(monday.getUTCDate() - 7 * weeksBack);
+  const end = new Date(start); end.setUTCDate(start.getUTCDate() + 6);
+  return { startISO: start.toISOString().slice(0, 10), endISO: end.toISOString().slice(0, 10) };
+}
+
+// weeksBack is calibrated against UPS's posted 90-day history (June 2026):
+// jet-driven rates use the week TWO weeks prior (matches their stated
+// methodology); diesel-driven rates track the EIA row ONE week prior (their
+// 2017 example says two, their actual posted numbers say one, three weeks
+// running). The numbers win. The weekly consistency check guards this.
+function pickLaggedRow(series, label, weeksBack) {
+  const { startISO, endISO } = lagWindow(weeksBack);
+  let lagged = null;
+  for (const r of series) {
+    const d = excelDateToISO(r[0]);
+    if (d >= startISO && d <= endISO) lagged = r;
+  }
+  const latest = series[series.length - 1];
+  if (!lagged) {
+    console.error(`[${label}] no row in lag window ${startISO}..${endISO}; using latest`);
+    return { price: latest[1], asOf: excelDateToISO(latest[0]), lagged: false, latest: latest[1], latestAsOf: excelDateToISO(latest[0]) };
+  }
+  return { price: lagged[1], asOf: excelDateToISO(lagged[0]), lagged: true, latest: latest[1], latestAsOf: excelDateToISO(latest[0]) };
+}
+
 async function fetchEiaOnHighwayDiesel() {
+  // Primary: the history spreadsheet, which lets us select the lag-week row.
+  try {
+    const res = await fetch(SOURCES.eiaDieselXls, { headers: BROWSER_HEADERS });
+    if (!res.ok) throw new Error(`EIA diesel xls responded ${res.status}`);
+    const series = parseEiaSeries(Buffer.from(await res.arrayBuffer()));
+    if (!series.length) throw new Error('EIA diesel spreadsheet empty');
+    return pickLaggedRow(series, 'eia-diesel', 1);
+  } catch (e) {
+    console.error(`[eia-diesel] history file failed (${e.message}); falling back to RSS current week`);
+  }
+  // Fallback: the RSS, current week only (no lag available).
   const res = await fetch(SOURCES.eiaOnHighwayRss, { headers: BROWSER_HEADERS });
   if (!res.ok) throw new Error(`EIA RSS responded ${res.status}`);
   const xml = await res.text();
@@ -124,48 +180,15 @@ async function fetchEiaOnHighwayDiesel() {
   // "5.210  .. U.S.". Match that specifically, not the first regional figure.
   const m = xml.match(/On-Highway Diesel[\s\S]*?([0-9]\.[0-9]{3})\s*\.\.\s*U\.S\./i);
   if (!m) throw new Error('EIA national on-highway diesel value not found in RSS');
-  return parseFloat(m[1]);
+  return { price: parseFloat(m[1]), asOf: null, lagged: false, latest: parseFloat(m[1]), latestAsOf: null };
 }
 
 async function fetchEiaJetFuel() {
   const res = await fetch(SOURCES.eiaJetXls, { headers: BROWSER_HEADERS });
   if (!res.ok) throw new Error(`EIA jet xls responded ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  const wb = xlsx.read(buf, { type: 'buffer' });
-  const sheet = wb.Sheets['Data 1'] || wb.Sheets[wb.SheetNames[wb.SheetNames.length - 1]];
-  const rows = xlsx.utils.sheet_to_json(sheet, { header: 1 });
-  const series = rows.filter(r => typeof r[0] === 'number' && typeof r[1] === 'number');
+  const series = parseEiaSeries(Buffer.from(await res.arrayBuffer()));
   if (!series.length) throw new Error('EIA jet fuel value not found in spreadsheet');
-
-  // UPS (and FedEx) set each Monday's surcharge from the jet price of the week
-  // TWO WEEKS PRIOR ("the week that is two weeks prior to the adjustment", per
-  // the posted methodology). So the value the band tables need is not the
-  // latest row, it is the row for the week starting 14 days before the current
-  // effective Monday. EIA dates its weekly rows by the Friday of the priced week.
-  const now = new Date();
-  const monday = new Date(now);
-  monday.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7)); // most recent Monday
-  const windowStart = new Date(monday); windowStart.setUTCDate(monday.getUTCDate() - 14);
-  const windowEnd = new Date(monday); windowEnd.setUTCDate(monday.getUTCDate() - 8);
-  const startISO = windowStart.toISOString().slice(0, 10);
-  const endISO = windowEnd.toISOString().slice(0, 10);
-
-  let lagged = null;
-  for (const r of series) {
-    const d = excelDateToISO(r[0]);
-    if (d >= startISO && d <= endISO) lagged = r;
-  }
-  const latest = series[series.length - 1];
-  if (!lagged) {
-    // The lag-week row should always exist in the history file; if EIA ever
-    // restructures, fall back to the latest row and say so in the log.
-    console.error(`[eia-jet] no row in lag window ${startISO}..${endISO}; using latest`);
-    lagged = latest;
-  }
-  return {
-    price: lagged[1], asOf: excelDateToISO(lagged[0]),
-    latest: latest[1], latestAsOf: excelDateToISO(latest[0])
-  };
+  return pickLaggedRow(series, 'eia-jet', 2);
 }
 
 async function fetchCanpar() {
@@ -499,8 +522,19 @@ async function main() {
   const prices = {
     nrcanDieselCAD: nrcan.ok ? cent(nrcan.value) : null,
     nrcanDieselCAD4WeekAvg: nrcan.ok ? cent(nrcan.value) : null, // see note: 4-week avg refinement below
-    eiaOnHighwayUSD: eiaDiesel.ok ? cent(eiaDiesel.value) : null,
+    eiaOnHighwayUSD: eiaDiesel.ok ? cent(eiaDiesel.value.price) : null,
     eiaJetGulfUSD: eiaJet.ok ? cent(eiaJet.value.price) : null
+  };
+  // Which inputs are properly lagged, so the consistency check below knows
+  // which derived rows are trustworthy enough to compare against the APIs.
+  // NRCan stays untrusted for now: its page shows a value that moves mid-week
+  // and the exact week-mapping UPS applies needs a few Mondays of accumulated
+  // inputsHistory to pin down. Those rows are skipped in the check (and are
+  // API-covered anyway), not compared with a known-shaky input.
+  const lagTrusted = {
+    nrcan: false,
+    eiaDiesel: eiaDiesel.ok && eiaDiesel.value.lagged === true,
+    jet: eiaJet.ok && eiaJet.value.lagged === true
   };
   const derived = computeRates(prices); // array of carriers with per-service rates
 
@@ -611,6 +645,11 @@ async function main() {
     }
   }
 
+  // Snapshot every derived value before the carrier APIs overwrite them, so we
+  // can verify the backup derivation against the APIs at the end of the run.
+  const derivedSnapshot = {};
+  for (const c of carriers) for (const s of c.services) derivedSnapshot[`${c.name}|${s.service}`] = s.current;
+
   // 3b. FedEx exact rates from the Rating API beat the band-table derivation.
   //     Carrier-stated published percentages off LIST quotes on the clean
   //     tracker account. On failure the derived values above stand, flagged by
@@ -680,6 +719,40 @@ async function main() {
     }
   }
 
+  // 3e. CONSISTENCY CHECK: the backup derivation, computed with properly
+  //     lagged inputs, must agree with the carrier APIs. A mismatch means a
+  //     carrier changed its band table and the safety net has a hole; the API
+  //     value still publishes, but the workflow's alert step emails about it.
+  //     Rows whose lag input is not yet available are skipped, not flagged.
+  const ROW_INPUT = {
+    'UPS Canada|Standard Service within Canada': 'nrcan',
+    'UPS Canada|Standard Service to the U.S.': 'eiaDiesel',
+    'UPS Canada|Domestic Express and Expedited': 'jet',
+    'FedEx Express|Intra-CAN': 'nrcan',
+    'FedEx Express|Intl.': 'jet',
+    'FedEx Ground and pickup services|Intra-CAN and pickup services': 'nrcan',
+    'FedEx Ground and pickup services|Intl.': 'eiaDiesel'
+  };
+  const backupCheck = { date: todayISO(), mismatches: [], skipped: [] };
+  for (const [key, dep] of Object.entries(ROW_INPUT)) {
+    const [name, service] = key.split('|');
+    const apiOk = name === 'UPS Canada' ? upsApi.ok : fedexApi.ok;
+    if (!apiOk) continue; // nothing to compare against this run
+    const c = carriers.find(x => x.name === name);
+    const svc = c && c.services.find(s => s.service === service);
+    const derivedVal = derivedSnapshot[key];
+    if (!svc || svc.current == null) continue;
+    if (!lagTrusted[dep] || derivedVal == null) { backupCheck.skipped.push(key); continue; }
+    if (derivedVal !== svc.current) {
+      backupCheck.mismatches.push({ row: key, api: svc.current, derived: derivedVal });
+      console.error(`[backup-check] MISMATCH ${key}: API ${svc.current}% vs derived ${derivedVal}% — band table may have changed`);
+    }
+  }
+  if (!backupCheck.mismatches.length) {
+    console.log(`[backup-check] derivation agrees with APIs on ${Object.keys(ROW_INPUT).length - backupCheck.skipped.length} rows` +
+      (backupCheck.skipped.length ? ` (${backupCheck.skipped.length} skipped: lag input not yet available)` : ''));
+  }
+
   // 4. Apply manually verified overrides (overrides.json). A verified posted
   //    number beats a derived estimate until the override expires. Expired
   //    entries are ignored, so the derived value resumes automatically at the
@@ -709,21 +782,24 @@ async function main() {
     nextUpdate: 'Every Monday morning',
     inputs: {
       nrcanDieselCAD: prices.nrcanDieselCAD,
+      nrcanLagApplied: lagTrusted.nrcan,
       eiaOnHighwayUSD: prices.eiaOnHighwayUSD,
+      dieselAsOf: eiaDiesel.ok ? eiaDiesel.value.asOf : null,
+      dieselLagApplied: lagTrusted.eiaDiesel,
       eiaJetGulfUSD: prices.eiaJetGulfUSD,
       jetAsOf: eiaJet.ok ? eiaJet.value.asOf : null,
-      jetLagApplied: true,
-      eiaJetGulfUSDLatest: eiaJet.ok ? eiaJet.value.latest : null,
-      jetLatestAsOf: eiaJet.ok ? eiaJet.value.latestAsOf : null
+      jetLagApplied: lagTrusted.jet
     },
-    // Rolling record of raw weekly inputs. Enables lagged NRCan diesel and
-    // Purolator's four-week trailing average once enough weeks accumulate.
+    backupCheck,
+    // Rolling record of raw current-week inputs (not the lagged values).
+    // Enables lagged NRCan diesel and Purolator's four-week trailing average
+    // once enough weeks accumulate.
     inputsHistory: [
       ...((prev.inputsHistory || []).filter(h => h.date !== todayISO()).slice(-11)),
       {
         date: todayISO(),
-        nrcanDieselCAD: prices.nrcanDieselCAD,
-        eiaOnHighwayUSD: prices.eiaOnHighwayUSD,
+        nrcanDieselCAD: nrcan.ok ? nrcan.value : null,
+        eiaOnHighwayUSD: eiaDiesel.ok ? eiaDiesel.value.latest : null,
         eiaJetGulfUSDLatest: eiaJet.ok ? eiaJet.value.latest : null
       }
     ],
