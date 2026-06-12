@@ -269,6 +269,90 @@ async function fetchFedexApi() {
   return result;
 }
 
+// UPS Rating API. Authenticated against a clean tracker-only account with no
+// negotiated pricing and no NegotiatedRatesIndicator on the request, so UPS
+// returns published rates. Fuel arrives as itemized charge code 375; the
+// published percent is fuel / BaseServiceCharge, which lands exactly on UPS's
+// posted number for domestic and CA-to-US Standard (validated against the
+// posted page, week of June 8 2026). International is NOT computed this way:
+// UPS applies fuel to a different base on international shipments, so that row
+// stays on the band-table derivation until its posted value is calibrated.
+async function fetchUpsApi() {
+  const id = process.env.UPS_CLIENT_ID;
+  const secret = process.env.UPS_CLIENT_SECRET;
+  const account = process.env.UPS_ACCOUNT;
+  if (!id || !secret || !account) throw new Error('UPS API credentials not configured');
+  const base = process.env.UPS_BASE || 'https://onlinetools.ups.com';
+
+  const tokRes = await fetch(`${base}/security/v1/oauth/token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Authorization': 'Basic ' + Buffer.from(`${id}:${secret}`).toString('base64')
+    },
+    body: new URLSearchParams({ grant_type: 'client_credentials' })
+  });
+  if (!tokRes.ok) throw new Error(`UPS OAuth responded ${tokRes.status}`);
+  const { access_token } = await tokRes.json();
+
+  async function shop(recipient) {
+    const res = await fetch(`${base}/api/rating/v2403/Shop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${access_token}` },
+      body: JSON.stringify({
+        RateRequest: {
+          Request: { TransactionReference: { CustomerContext: 'PnP fuel tracker' } },
+          Shipment: {
+            Shipper: { ShipperNumber: account, Address: { City: 'Toronto', StateProvinceCode: 'ON', PostalCode: 'M5X1A9', CountryCode: 'CA' } },
+            ShipTo: { Address: recipient },
+            ShipFrom: { Address: { City: 'Toronto', StateProvinceCode: 'ON', PostalCode: 'M5X1A9', CountryCode: 'CA' } },
+            Package: [{ PackagingType: { Code: '02' }, PackageWeight: { UnitOfMeasurement: { Code: 'LBS' }, Weight: '1' } }]
+          }
+        }
+      })
+    });
+    if (!res.ok) throw new Error(`UPS rate call responded ${res.status}`);
+    const json = await res.json();
+    const list = json?.RateResponse?.RatedShipment || [];
+    const shipments = Array.isArray(list) ? list : [list];
+    const out = {};
+    for (const s of shipments) {
+      const baseCharge = parseFloat(s.BaseServiceCharge?.MonetaryValue ?? 'NaN');
+      const itemized = s.ItemizedCharges ? (Array.isArray(s.ItemizedCharges) ? s.ItemizedCharges : [s.ItemizedCharges]) : [];
+      const fuelItem = itemized.find(c => c.Code === '375' || /fuel/i.test(c.Description || ''));
+      const fuel = fuelItem ? parseFloat(fuelItem.MonetaryValue) : null;
+      if (fuel != null && baseCharge > 0) out[s.Service?.Code] = (fuel / baseCharge) * 100;
+    }
+    return out;
+  }
+
+  // UPS posts rates in 0.25-point steps; penny rounding in a quote puts the
+  // ratio within a few hundredths of the posted number, so snap to the step.
+  const snap = r => Math.round(r * 4) / 4;
+
+  const domestic = await shop({ City: 'Montreal', StateProvinceCode: 'QC', PostalCode: 'H2Y1C6', CountryCode: 'CA' });
+  const us = await shop({ City: 'New York', StateProvinceCode: 'NY', PostalCode: '10001', CountryCode: 'US' });
+
+  // Domestic express family: codes 01 Express, 02 Expedited, 13 Saver, 14 Early.
+  const expressCodes = ['01', '02', '13', '14'].filter(c => domestic[c] != null);
+  const expressRates = expressCodes.map(c => snap(domestic[c]));
+  if (!expressRates.length || domestic['11'] == null || us['11'] == null) {
+    throw new Error('UPS response missing Standard or Express services');
+  }
+  if (!expressRates.every(r => r === expressRates[0])) {
+    throw new Error(`UPS domestic express family disagrees after snapping: ${expressRates.join(', ')}`);
+  }
+  const result = {
+    standardCanada: snap(domestic['11']),
+    domesticExpress: expressRates[0],
+    standardUS: snap(us['11'])
+  };
+  for (const [k, v] of Object.entries(result)) {
+    if (!(v > 0 && v < 100)) throw new Error(`UPS ${k} out of range: ${v}`);
+  }
+  return result;
+}
+
 // ----------------------------------------------------------------------------
 // ORCHESTRATOR. Fetch everything, fall back per-source, assemble the JSON.
 // ----------------------------------------------------------------------------
@@ -300,6 +384,7 @@ async function main() {
   const canpar = await safe('Canpar endpoint', fetchCanpar);
   const canadaPost = await safe('Canada Post page', fetchCanadaPost);
   const fedexApi = await safe('FedEx Rating API', fetchFedexApi);
+  const upsApi = await safe('UPS Rating API', fetchUpsApi);
 
   // 3. Run the band-table engine for the government-derived carriers.
   //    The engine needs all three prices. If one is missing we still compute the
@@ -445,6 +530,31 @@ async function main() {
       ['Intl.', v.groundIntl]
     ]);
     console.log(`[fedex-api] exact list rates: Express CA ${v.expressDomestic}%, Express Intl ${v.expressIntl}%, Ground CA ${v.groundDomestic}%, Ground Intl ${v.groundIntl}%`);
+  }
+
+  // 3c. UPS exact rates from the Rating API beat the derivation for the three
+  //     rows where fuel/base lands exactly on the posted number. International
+  //     stays derived: UPS applies fuel to a different base there.
+  if (upsApi.ok) {
+    const v = upsApi.value;
+    const c = carriers.find(x => x.name === 'UPS Canada');
+    const p = prevCarrier(prev, 'UPS Canada');
+    if (c) {
+      const exact = {
+        'Standard Service within Canada': v.standardCanada,
+        'Standard Service to the U.S.': v.standardUS,
+        'Domestic Express and Expedited': v.domesticExpress
+      };
+      for (const svc of c.services) {
+        if (exact[svc.service] == null) continue;
+        const old = p && (p.services || []).find(s => s.service === svc.service);
+        svc.previous = old ? old.current : exact[svc.service];
+        svc.current = exact[svc.service];
+      }
+      c.status = 'ok';
+      c.lastVerified = todayISO();
+      console.log(`[ups-api] exact list rates: Standard CA ${v.standardCanada}%, Standard US ${v.standardUS}%, Domestic Express ${v.domesticExpress}%`);
+    }
   }
 
   // 4. Apply manually verified overrides (overrides.json). A verified posted
