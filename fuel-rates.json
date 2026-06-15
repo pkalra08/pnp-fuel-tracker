@@ -1,30 +1,32 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-12T15:48:37.235Z",
+  "generatedAt": "2026-06-15T21:37:40.266Z",
   "nextUpdate": "Every Monday morning",
   "inputs": {
-    "nrcanDieselCAD": 2.02,
+    "nrcanDieselCAD": null,
     "nrcanLagApplied": false,
-    "eiaOnHighwayUSD": 5.35,
-    "dieselAsOf": "2026-06-01",
+    "eiaOnHighwayUSD": 5.21,
+    "dieselAsOf": "2026-06-08",
     "dieselLagApplied": true,
-    "eiaJetGulfUSD": 3.3,
-    "jetAsOf": "2026-05-29",
+    "eiaJetGulfUSD": 3.37,
+    "jetAsOf": "2026-06-05",
     "jetLagApplied": true
   },
   "backupCheck": {
-    "date": "2026-06-12",
+    "date": "2026-06-15",
     "mismatches": [],
-    "skipped": [
-      "UPS Canada|Standard Service within Canada",
-      "FedEx Express|Intra-CAN",
-      "FedEx Ground and pickup services|Intra-CAN and pickup services"
-    ]
+    "skipped": []
   },
   "inputsHistory": [
     {
       "date": "2026-06-12",
       "nrcanDieselCAD": 2.024,
+      "eiaOnHighwayUSD": 5.21,
+      "eiaJetGulfUSDLatest": 3.371
+    },
+    {
+      "date": "2026-06-15",
+      "nrcanDieselCAD": null,
       "eiaOnHighwayUSD": 5.21,
       "eiaJetGulfUSDLatest": 3.371
     }
@@ -34,7 +36,7 @@
       "name": "UPS Canada",
       "url": "https://www.ups.com/ca/en/support/shipping-support/shipping-costs-rates/fuel-surcharges",
       "cadence": "weekly",
-      "status": "ok",
+      "status": "stale",
       "lastVerified": "2026-06-12",
       "services": [
         {
@@ -44,17 +46,17 @@
         },
         {
           "service": "Standard Service to the U.S.",
-          "current": 20.5,
+          "current": 20,
           "previous": 20.5
         },
         {
           "service": "International Express, Expedited & 3 Day Select",
-          "current": 34,
+          "current": 34.5,
           "previous": 34
         },
         {
           "service": "Domestic Express and Expedited",
-          "current": 32,
+          "current": 32.25,
           "previous": 32
         }
       ]
@@ -63,7 +65,7 @@
       "name": "FedEx Express",
       "url": "https://www.fedex.com/en-ca/shipping/fuel-surcharges.html",
       "cadence": "weekly",
-      "status": "ok",
+      "status": "stale",
       "lastVerified": "2026-06-12",
       "services": [
         {
@@ -73,7 +75,7 @@
         },
         {
           "service": "Intl.",
-          "current": 34,
+          "current": 34.5,
           "previous": 34
         }
       ]
@@ -82,7 +84,7 @@
       "name": "FedEx Ground and pickup services",
       "url": "https://www.fedex.com/en-ca/shipping/fuel-surcharges.html",
       "cadence": "weekly",
-      "status": "ok",
+      "status": "stale",
       "lastVerified": "2026-06-12",
       "services": [
         {
@@ -92,7 +94,7 @@
         },
         {
           "service": "Intl.",
-          "current": 20.5,
+          "current": 20,
           "previous": 20.5
         }
       ]
@@ -116,7 +118,7 @@
       "url": "https://www.canpar.com/en/shipping/fuel_surcharge.htm",
       "cadence": "weekly",
       "status": "ok",
-      "lastVerified": "2026-06-12",
+      "lastVerified": "2026-06-15",
       "services": [
         {
           "service": "Domestic Canada",
@@ -130,7 +132,7 @@
       "url": "https://www.loomisexpress.com/loomship/Services/FuelSurcharges",
       "cadence": "weekly",
       "status": "ok",
-      "lastVerified": "2026-06-12",
+      "lastVerified": "2026-06-15",
       "services": [
         {
           "service": "Domestic Express and Ground Service",
@@ -139,7 +141,7 @@
         },
         {
           "service": "Worldwide Service",
-          "current": 23.25,
+          "current": 23.5,
           "previous": 23.25
         }
       ]
@@ -149,7 +151,7 @@
       "url": "https://www.canadapost-postescanada.ca/cpc/en/support/kb/company-policies/rates-taxes-surcharges/fuel-surcharges-on-mail-and-parcels.page",
       "cadence": "weekly",
       "status": "ok",
-      "lastVerified": "2026-06-12",
+      "lastVerified": "2026-06-15",
       "services": [
         {
           "service": "Domestic Services",
