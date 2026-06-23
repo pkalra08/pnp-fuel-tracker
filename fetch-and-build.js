@@ -786,6 +786,23 @@ async function main() {
     if (e.code !== 'ENOENT') console.error(`[override] skipped: ${e.message}`);
   }
 
+  // ---- PREVIOUS normalization (re-run safe, week-over-week) ----
+  // "previous" must reflect the last DISTINCT prior rate, not the value from
+  // the most recent build run. Without this, same-week re-runs collapse
+  // previous onto current and the change pill wrongly reads "No change".
+  // Rule: if current changed vs the prior file, capture the prior current as
+  // previous; if current is unchanged, carry the prior file's previous forward
+  // untouched (so the last real move persists until the next real move).
+  for (const c of carriers) {
+    const pc = prevCarrier(prev, c.name);
+    for (const svc of c.services) {
+      const ps = pc && (pc.services || []).find(s => s.service === svc.service);
+      if (!ps || ps.current == null) continue; // no prior data: leave as already set
+      if (svc.current !== ps.current) svc.previous = ps.current;
+      else svc.previous = (ps.previous != null ? ps.previous : ps.current);
+    }
+  }
+
   const output = {
     version: 1,
     generatedAt: new Date().toISOString(),

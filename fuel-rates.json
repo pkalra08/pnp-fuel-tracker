@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-23T17:16:28.737Z",
+  "generatedAt": "2026-06-23T19:42:39.169Z",
   "nextUpdate": "Every Monday morning",
   "inputs": {
-    "nrcanDieselCAD": 1.9,
+    "nrcanDieselCAD": 1.89,
     "nrcanLagApplied": false,
     "eiaOnHighwayUSD": 5.06,
     "dieselAsOf": "2026-06-15",
@@ -31,7 +31,7 @@
   "inputsHistory": [
     {
       "date": "2026-06-23",
-      "nrcanDieselCAD": 1.9,
+      "nrcanDieselCAD": 1.893,
       "eiaOnHighwayUSD": 4.832,
       "eiaJetGulfUSDLatest": 3.185
     }
@@ -52,17 +52,17 @@
         {
           "service": "Standard Service to the U.S.",
           "current": 19.5,
-          "previous": 19.5
+          "previous": 20
         },
         {
           "service": "International Express, Expedited & 3 Day Select",
           "current": 33.5,
-          "previous": 33.5
+          "previous": 34.5
         },
         {
           "service": "Domestic Express and Expedited",
           "current": 31.25,
-          "previous": 31.25
+          "previous": 32.25
         }
       ]
     },
@@ -76,12 +76,12 @@
         {
           "service": "Intra-CAN",
           "current": 36.5,
-          "previous": 36.5
+          "previous": 37.5
         },
         {
           "service": "Intl.",
           "current": 33.25,
-          "previous": 33.25
+          "previous": 34.5
         }
       ]
     },
@@ -95,12 +95,12 @@
         {
           "service": "Intra-CAN and pickup services",
           "current": 36.5,
-          "previous": 36.5
+          "previous": 37.5
         },
         {
           "service": "Intl.",
           "current": 19.5,
-          "previous": 19.5
+          "previous": 20
         }
       ]
     },
@@ -114,7 +114,7 @@
         {
           "service": "Courier (all services and destinations)",
           "current": 41.5,
-          "previous": null
+          "previous": 41.5
         }
       ]
     },
@@ -128,7 +128,7 @@
         {
           "service": "Domestic Canada",
           "current": 34.8,
-          "previous": 34.8
+          "previous": 36.3
         }
       ]
     },
@@ -142,12 +142,12 @@
         {
           "service": "Domestic Express and Ground Service",
           "current": 34.8,
-          "previous": 34.8
+          "previous": 36.3
         },
         {
           "service": "Worldwide Service",
           "current": 22.5,
-          "previous": 22.5
+          "previous": 23.5
         }
       ]
     },
