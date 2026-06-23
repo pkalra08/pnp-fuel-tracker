@@ -43,6 +43,10 @@ jobs:
           UPS_CLIENT_ID: ${{ secrets.UPS_CLIENT_ID }}
           UPS_CLIENT_SECRET: ${{ secrets.UPS_CLIENT_SECRET }}
           UPS_ACCOUNT: ${{ secrets.UPS_ACCOUNT }}
+          PUROLATOR_KEY: ${{ secrets.PUROLATOR_KEY }}
+          PUROLATOR_PASSWORD: ${{ secrets.PUROLATOR_PASSWORD }}
+          PUROLATOR_ACCOUNT: ${{ secrets.PUROLATOR_ACCOUNT }}
+          PUROLATOR_BASE: https://webservices.purolator.com
         run: node fetch-and-build.js
 
       - name: Commit the updated rates
