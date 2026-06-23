@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-23T19:42:39.169Z",
+  "generatedAt": "2026-06-23T20:03:45.446Z",
   "nextUpdate": "Every Monday morning",
   "inputs": {
     "nrcanDieselCAD": 1.89,
@@ -114,7 +114,7 @@
         {
           "service": "Courier (all services and destinations)",
           "current": 41.5,
-          "previous": 41.5
+          "previous": 45.5
         }
       ]
     },
@@ -146,8 +146,8 @@
         },
         {
           "service": "Worldwide Service",
-          "current": 22.5,
-          "previous": 23.5
+          "current": 27,
+          "previous": 27
         }
       ]
     },

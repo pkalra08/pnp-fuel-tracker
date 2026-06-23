@@ -61,6 +61,12 @@ const SOURCES = {
   // with rate + start_date + end_date (epoch milliseconds).
   canparEndpoint: 'https://canship.canpar.com/api/CanparAddons/getPublicFuelSurchargeRate',
 
+  // Loomis Express fuel page. Server-rendered HTML with two tables (Domestic,
+  // Worldwide), each forward-dated by effective date. We read the Worldwide
+  // tariff rate here because it does not track the Canpar/diesel band like
+  // Domestic does, and the old jet derivation was wrong (22.5 vs posted 27.0).
+  loomisPage: 'https://www.loomisexpress.com/loomship/Services/FuelSurcharges',
+
   // Canada Post fuel surcharge knowledge-base page. Confirmed: static HTML, the
   // three rate numbers are in the document, readable by a plain request.
   canadaPostPage: 'https://www.canadapost-postescanada.ca/cpc/en/support/kb/company-policies/rates-taxes-surcharges/fuel-surcharges-on-mail-and-parcels.page'
@@ -477,6 +483,38 @@ async function fetchPurolatorApi() {
   return rate;
 }
 
+// Loomis Worldwide tariff fuel surcharge, read from the published page. The
+// Worldwide table lists rows of "MM/DD/YYYY  <tariff>%  <volume-discount>%";
+// we take the tariff (first %, the standard published rate) for the row whose
+// effective date is the most recent on or before today. Forward-dated rows
+// (next week's rate) are correctly ignored until they take effect.
+async function fetchLoomisWorldwide() {
+  const res = await fetch(SOURCES.loomisPage, { headers: BROWSER_HEADERS });
+  if (!res.ok) throw new Error(`Loomis page responded ${res.status}`);
+  const html = await res.text();
+  const h = html.search(/Worldwide Service/i);
+  if (h < 0) throw new Error('Loomis Worldwide section not found');
+  // Bound to the Worldwide table region so Domestic-table rows cannot leak in.
+  // Markup between a date cell and its rate cell is unpredictable, so pair by
+  // position: each row's tariff is the first percentage appearing after its
+  // effective date. The tariff column is the first %; the volume-discount % is
+  // the second and is ignored.
+  const seg = html.slice(h, h + 3000);
+  // Loomis writes effective dates as MM-DD-YYYY (dashes), unlike Canpar's slashes.
+  const dates = [...seg.matchAll(/(\d{2})-(\d{2})-(\d{4})/g)].map(m => ({ i: m.index, date: `${m[3]}-${m[1]}-${m[2]}` }));
+  const pcts = [...seg.matchAll(/(\d{1,2}\.\d{2})\s*%/g)].map(m => ({ i: m.index, v: parseFloat(m[1]) }));
+  const rows = dates.map(d => {
+    const p = pcts.find(x => x.i > d.i);
+    return p ? { date: d.date, tariff: p.v } : null;
+  }).filter(Boolean);
+  if (!rows.length) throw new Error('Loomis Worldwide rows not parsed');
+  const today = todayISO();
+  const eligible = rows.filter(r => r.date <= today).sort((a, b) => (a.date < b.date ? 1 : -1));
+  const pick = eligible[0] || rows.sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  if (!(pick.tariff > 0 && pick.tariff < 100)) throw new Error(`Loomis Worldwide out of range: ${pick.tariff}`);
+  return { rate: pick.tariff, effectiveDate: pick.date };
+}
+
 // ----------------------------------------------------------------------------
 // ORCHESTRATOR. Fetch everything, fall back per-source, assemble the JSON.
 // ----------------------------------------------------------------------------
@@ -507,6 +545,7 @@ async function main() {
   // 2. Pull the direct carrier sources.
   const canpar = await safe('Canpar endpoint', fetchCanpar);
   const canadaPost = await safe('Canada Post page', fetchCanadaPost);
+  const loomisWW = await safe('Loomis Worldwide page', fetchLoomisWorldwide);
   const fedexApi = await safe('FedEx Rating API', fetchFedexApi);
   const upsApi = await safe('UPS Rating API', fetchUpsApi);
   const puroApi = await safe('Purolator E-Ship API', fetchPurolatorApi);
@@ -612,13 +651,18 @@ async function main() {
     } else if (pDom) {
       services.push({ ...pDom });
     }
-    // Worldwide from jet fuel derivation
-    if (worldwide && worldwide.current != null) {
-      services.push({ service: 'Worldwide Service', current: worldwide.current, previous: pWorld ? pWorld.current : worldwide.current });
+    // Worldwide from the Loomis published page (authoritative tariff rate).
+    // Fall back to last-known, then to the jet derivation only as a last resort.
+    let wwFresh = false;
+    if (loomisWW.ok) {
+      services.push({ service: 'Worldwide Service', current: loomisWW.value.rate, previous: pWorld ? pWorld.current : loomisWW.value.rate });
+      wwFresh = true;
     } else if (pWorld) {
       services.push({ ...pWorld });
+    } else if (worldwide && worldwide.current != null) {
+      services.push({ service: 'Worldwide Service', current: worldwide.current, previous: worldwide.current });
     }
-    const fresh = canpar.ok && worldwide && worldwide.current != null;
+    const fresh = canpar.ok && wwFresh;
     carriers.push({
       name, url: 'https://www.loomisexpress.com/loomship/Services/FuelSurcharges',
       cadence: 'weekly', status: fresh ? 'ok' : 'stale',
@@ -768,6 +812,7 @@ async function main() {
   //    entries are ignored, so the derived value resumes automatically at the
   //    carrier's next adjustment. previous is dropped on overridden rows unless
   //    the override supplies one, so the site never shows a false change pill.
+  const overriddenKeys = new Set();
   try {
     const today = todayISO();
     const { overrides = [] } = JSON.parse(fs.readFileSync(OVERRIDES_FILE, 'utf8'));
@@ -780,6 +825,7 @@ async function main() {
       svc.previous = ('previous' in o) ? o.previous : null;
       carrier.status = 'ok';
       carrier.lastVerified = o.verified || today;
+      overriddenKeys.add(`${o.carrier}|${o.service}`);
       console.log(`[override] ${o.carrier} / ${o.service} = ${o.rate}% (verified ${o.verified}, expires ${o.expires})`);
     }
   } catch (e) {
@@ -796,6 +842,7 @@ async function main() {
   for (const c of carriers) {
     const pc = prevCarrier(prev, c.name);
     for (const svc of c.services) {
+      if (overriddenKeys.has(`${c.name}|${svc.service}`)) continue; // override owns previous
       const ps = pc && (pc.services || []).find(s => s.service === svc.service);
       if (!ps || ps.current == null) continue; // no prior data: leave as already set
       if (svc.current !== ps.current) svc.previous = ps.current;

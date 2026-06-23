@@ -6,9 +6,10 @@
       "carrier": "Purolator",
       "service": "Courier (all services and destinations)",
       "rate": 41.5,
+      "previous": 45.5,
       "verified": "2026-06-11",
       "expires": "2026-07-06",
-      "source": "Posted monthly rate active June 1 to July 5 2026, confirmed by account quote ratio (41.5%) and independent web pull"
+      "source": "Posted monthly rate active June 1 to July 5 2026 (41.5%); prior month May 4-31 was 45.5%. Purolator E-Ship API returns only the current quote, no history, so previous is seeded from the posted page. Confirmed by account quote ratio (41.5%) and independent web pull"
     }
   ]
 }
