@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-23T17:03:42.904Z",
+  "generatedAt": "2026-06-23T17:05:07.429Z",
   "nextUpdate": "Every Monday morning",
   "inputs": {
     "nrcanDieselCAD": 1.9,
@@ -14,7 +14,8 @@
   },
   "backupCheck": {
     "date": "2026-06-23",
-    "mismatches": [
+    "mismatches": [],
+    "withinTolerance": [
       {
         "row": "FedEx Express|Intl.",
         "api": 33.25,

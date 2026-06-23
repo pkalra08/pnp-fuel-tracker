@@ -724,17 +724,24 @@ async function main() {
   //     carrier changed its band table and the safety net has a hole; the API
   //     value still publishes, but the workflow's alert step emails about it.
   //     Rows whose lag input is not yet available are skipped, not flagged.
+  // Each row: which lagged input drives it, and the backup tolerance. Rows whose
+  // exact band table we have verified against the carrier's posted page get
+  // tolerance 0 (any drift = a real table change = hard alert). International
+  // jet/diesel rows, whose exact band table the carrier does not publish
+  // cleanly, get a one-band (0.25) tolerance: the API is exact and publishes;
+  // the backup is allowed to sit within a band without crying wolf. A larger
+  // gap still alerts, which is what a genuine table change would produce.
   const ROW_INPUT = {
-    'UPS Canada|Standard Service within Canada': 'nrcan',
-    'UPS Canada|Standard Service to the U.S.': 'eiaDiesel',
-    'UPS Canada|Domestic Express and Expedited': 'jet',
-    'FedEx Express|Intra-CAN': 'nrcan',
-    'FedEx Express|Intl.': 'jet',
-    'FedEx Ground and pickup services|Intra-CAN and pickup services': 'nrcan',
-    'FedEx Ground and pickup services|Intl.': 'eiaDiesel'
+    'UPS Canada|Standard Service within Canada': { dep: 'nrcan', tol: 0 },
+    'UPS Canada|Standard Service to the U.S.': { dep: 'eiaDiesel', tol: 0 },
+    'UPS Canada|Domestic Express and Expedited': { dep: 'jet', tol: 0 },
+    'FedEx Express|Intra-CAN': { dep: 'nrcan', tol: 0 },
+    'FedEx Express|Intl.': { dep: 'jet', tol: 0.25 },
+    'FedEx Ground and pickup services|Intra-CAN and pickup services': { dep: 'nrcan', tol: 0 },
+    'FedEx Ground and pickup services|Intl.': { dep: 'eiaDiesel', tol: 0.25 }
   };
-  const backupCheck = { date: todayISO(), mismatches: [], skipped: [] };
-  for (const [key, dep] of Object.entries(ROW_INPUT)) {
+  const backupCheck = { date: todayISO(), mismatches: [], withinTolerance: [], skipped: [] };
+  for (const [key, { dep, tol }] of Object.entries(ROW_INPUT)) {
     const [name, service] = key.split('|');
     const apiOk = name === 'UPS Canada' ? upsApi.ok : fedexApi.ok;
     if (!apiOk) continue; // nothing to compare against this run
@@ -743,9 +750,12 @@ async function main() {
     const derivedVal = derivedSnapshot[key];
     if (!svc || svc.current == null) continue;
     if (!lagTrusted[dep] || derivedVal == null) { backupCheck.skipped.push(key); continue; }
-    if (derivedVal !== svc.current) {
+    const gap = Math.abs(derivedVal - svc.current);
+    if (gap > tol + 1e-9) {
       backupCheck.mismatches.push({ row: key, api: svc.current, derived: derivedVal });
-      console.error(`[backup-check] MISMATCH ${key}: API ${svc.current}% vs derived ${derivedVal}% — band table may have changed`);
+      console.error(`[backup-check] MISMATCH ${key}: API ${svc.current}% vs derived ${derivedVal}% (gap ${gap}, tol ${tol}) — band table may have changed`);
+    } else if (gap > 1e-9) {
+      backupCheck.withinTolerance.push({ row: key, api: svc.current, derived: derivedVal });
     }
   }
   if (!backupCheck.mismatches.length) {
