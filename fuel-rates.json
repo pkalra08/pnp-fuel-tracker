@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-06-29T18:30:51.861Z",
+  "generatedAt": "2026-06-29T19:04:34.097Z",
   "nextUpdate": "Every Monday morning",
   "inputs": {
     "nrcanDieselCAD": 1.89,
@@ -109,7 +109,7 @@
       "url": "https://www.purolator.com/en/courier-fuel-surcharges",
       "cadence": "weekly",
       "status": "ok",
-      "lastVerified": "2026-06-11",
+      "lastVerified": "2026-06-29",
       "services": [
         {
           "service": "Courier (all services and destinations)",

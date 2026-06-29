@@ -22,12 +22,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies
         run: npm install xlsx cheerio fast-xml-parser
@@ -57,15 +57,17 @@ jobs:
           git diff --staged --quiet || git commit -m "Fuel rates updated $(date -u +%Y-%m-%d)"
           git push
 
-      # Runs AFTER the commit so the site always gets the best available data,
-      # then fails the run (which makes GitHub email you) only when something
-      # needs a human: a row fell back to last-known, or a manual override is
-      # about to expire with no API replacing it. Quiet means healthy.
-      - name: Alert on stale rows or expiring overrides
+      # Runs AFTER the commit so the site always gets the best available data.
+      # Two severities: PROBLEMS fail the run (red X + email) because the data is
+      # degraded and needs a human — a row fell back to last-known, or the backup
+      # derivation disagrees with a live API (a carrier likely changed its band
+      # table). WARNINGS only log — e.g. a manual override nearing expiry — so a
+      # routine heads-up never makes a healthy, fully-updated run look broken.
+      - name: Alert on stale rows or backup drift
         run: |
           node -e "
           const j = require('./fuel-rates.json');
-          const problems = [];
+          const problems = [], warnings = [];
           const stale = j.carriers.filter(c => c.status !== 'ok').map(c => c.name);
           if (stale.length) problems.push('Rows on last-known values: ' + stale.join(', '));
           for (const m of (j.backupCheck?.mismatches || [])) {
@@ -77,10 +79,11 @@ jobs:
             const soon = new Date(Date.now() + 8 * 86400e3).toISOString().slice(0, 10);
             for (const o of overrides) {
               if (o.expires && o.expires > today && o.expires <= soon) {
-                problems.push('Override expires ' + o.expires + ': ' + o.carrier + ' / ' + o.service + '. Wire the carrier API or refresh the verified rate before then.');
+                warnings.push('Heads-up: override expires ' + o.expires + ' for ' + o.carrier + ' / ' + o.service + '. Confirm the API covers it or refresh the verified rate.');
               }
             }
           } catch {}
-          if (problems.length) { console.error(problems.join('\n')); process.exit(1); }
-          console.log('All rows fresh. No overrides near expiry. Nothing to do.');
+          if (warnings.length) console.log('WARNINGS:\n' + warnings.join('\n'));
+          if (problems.length) { console.error('PROBLEMS:\n' + problems.join('\n')); process.exit(1); }
+          console.log('All rows fresh. Backup agrees with the APIs. Nothing to do.');
           "
